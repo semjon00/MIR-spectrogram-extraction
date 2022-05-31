@@ -1,0 +1,6 @@
+Shader Codegen
+BUG: sudden -inf in the shader
+instantaneous sound off Friction
+fair sound volume
+compressed output
+retrospective adjacent noise correction
