@@ -6,7 +6,7 @@ import math
 import random
 from PIL import Image
 import moderngl
-import glsl_gen
+from ImglslWrapper import ImglslWrapper
 
 
 def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> list[float]:
@@ -39,12 +39,8 @@ def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> li
 
 
 def create_spectrogram_brrr(samples, fr):
-    # Preparing the BRRR machine
-    context = moderngl.create_context(standalone=True, require=430)  # Nothing in OpenGL works without a context
-
-    imtext = open('./hair_shader.imglsl', 'r').read()
+    # Preparing the values for the shader run
     env = {}
-
     env['FrameRate'] = fr
     env['Samples'] = samples
     env['HairsFreq'] = init_hairs_freq(fr)
@@ -64,13 +60,15 @@ def create_spectrogram_brrr(samples, fr):
     act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr)) + 2
     env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
 
-    # Running the BRRR machine
-    text, init, get = glsl_gen.generate(imtext, env)
-    compute_shader = context.compute_shader(text)
-    init(context)
+    # Preparing the shader to run
+    ctx = moderngl.create_context(standalone=True, require=430)
+    w = ImglslWrapper(ctx)
+    w.set_multiple(env)
+    imtext = open('./hair_shader.imglsl', 'r').read()
+    compute_shader = ctx.compute_shader(w.cook_imglsl(imtext, 'spectrogram'))
     compute_shader.run(group_x=hairs_n)
 
-    output = get('Act')
+    output = w.get('Act')
     return output
 
 
