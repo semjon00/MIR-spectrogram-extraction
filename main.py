@@ -1,10 +1,12 @@
 import pydub  # https://github.com/jiaaro/pydub
 import numpy
 import os
+from pathlib import Path
 import math
 import random
 from PIL import Image
 import moderngl
+import glsl_gen
 
 
 def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> list[float]:
@@ -39,66 +41,50 @@ def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> li
 def create_spectrogram_brrr(samples, fr):
     # Preparing the BRRR machine
     context = moderngl.create_context(standalone=True, require=430)  # Nothing in OpenGL works without a context
-    shader_str = open('./hair_shader.glsl', 'r').read()
 
-    # Buffer-binding magic
-    binding_val_i = 0
-    while 'BINDING_VAL' in shader_str:
-        shader_str = shader_str.replace('BINDING_VAL', str(binding_val_i), 1)
-        shader_str = shader_str.replace('BUFFER_NAME', 'buffer_i_' + str(binding_val_i), 1)
-        binding_val_i += 1
-    compute_shader = context.compute_shader(shader_str)  # Create Compute Shader
-    bfs = []  # Buffers for the sharder
-    def new_buffer(_array, _bf):
-        _array = numpy.array(_array)
-        _buffer = context.buffer(_array)
-        _buffer.bind_to_storage_buffer(len(_bf))
-        _bf += [_buffer]
+    imtext = open('./hair_shader.imglsl', 'r').read()
+    env = {}
 
-    # Creating buffers, putting values
-    samples_n = len(samples)
-    new_buffer([fr] + samples, bfs)
-
-    hairs_freq = init_hairs_freq(fr)
-    hairs_n = len(hairs_freq)
-    new_buffer(hairs_freq, bfs)
+    env['FrameRate'] = fr
+    env['Samples'] = samples
+    env['HairsFreq'] = init_hairs_freq(fr)
+    hairs_n = len(env['HairsFreq'])
 
     _general_friction_coff = 10.07  # The more, the more aggressive is the friction
-    friction = [math.pow(x, 0) for x in hairs_freq]
+    friction = [math.pow(x, 0) for x in env['HairsFreq']]
     friction = [f * _general_friction_coff * math.pi / fr for f in friction]
     friction = [1.0 - pow(0.1, f) for f in friction]
-    new_buffer(friction, bfs)
+    env['Friction'] = friction
 
-    pull = [pow(math.tau * freq / fr, 2) for freq in hairs_freq]
-    new_buffer(pull, bfs)
+    env['Pull'] = [pow(math.tau * freq / fr, 2) for freq in env['HairsFreq']]
 
-    cycling_speed_aggregate = numpy.zeros(hairs_n * (5 + math.ceil(fr / hairs_freq[0])), dtype=numpy.float64)
-    new_buffer(cycling_speed_aggregate, bfs)
+    env['CycAgg'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
 
-    acc = numpy.zeros(hairs_n * samples_n, dtype=numpy.float64)
-    new_buffer(acc, bfs)
+    env['Act'] = numpy.zeros((hairs_n, len(samples)), dtype=numpy.float64)
 
     # Running the BRRR machine
+    text, init, get = glsl_gen.generate(imtext, env)
+    compute_shader = context.compute_shader(text)
+    init(context)
     compute_shader.run(group_x=hairs_n)
 
-    # Read the buffer, interpret as floats, return
-    acc = numpy.frombuffer(bfs[len(bfs) - 1].read(), dtype='<f8')
-    acc.shape = (hairs_n, acc.size // hairs_n)
-    # arr = numpy.delete(arr, 0, 1)
-
-    return acc
+    output = get('Act')
+    return output
 
 
 def random_demo():
-    test_music_names = os.listdir(os.getcwd() + os.sep + 'test_music' + os.sep)
-    print(test_music_names)
+    test_music_names = os.listdir('in')
+    if len(test_music_names) == 0:
+        print('Sorry, you do not have any demo music in the folder called in...\n'
+              'Unfortunately, demo music is not distributed with the code due to copyright restrictions.')
+        exit()
     filename = random.choice(test_music_names)
-    filename = os.getcwd() + os.sep + 'test_music' + os.sep + filename
+    filename = os.getcwd() + os.sep + 'in' + os.sep + filename
     truncate = (17.0, 20.0)
     return filename, truncate
 
 
-def get_samples(filename, truncate):
+def get_samples(filename, truncate, outname):
     sound = pydub.AudioSegment.from_file(filename)
     sound = sound.set_channels(1)
 
@@ -107,10 +93,10 @@ def get_samples(filename, truncate):
         sound.fade_in(20)
         sound.fade_out(20)
 
-    sound.export(f"out/{filename}.fragment.mp3", format="mp3")
+    sound.export(f"out{os.sep}{outname}-fragment.mp3", format="mp3")
 
     all_samples = numpy.array(sound.get_array_of_samples())
-    samples_float = numpy.array(all_samples).T.astype(numpy.float32)
+    samples_float = numpy.array(all_samples).T.astype(numpy.float64)
     samples_float = samples_float / sound.max
 
     return samples_float, sound.frame_rate
@@ -136,7 +122,7 @@ def save(output, name):
     output = output.astype(numpy.int8)
 
     img = Image.fromarray(output, 'L')
-    img.save(f'out/{name}.fragment.png')
+    img.save(f'out/{name}.png')
 
 
 def debug_brrr():
@@ -159,7 +145,9 @@ def debug_brrr():
 
 
 if __name__ == '__main__':
-    debug_brrr()
+    for f in ['in', 'out']:
+        Path(f).mkdir(exist_ok=True)
+    #debug_brrr()
 
     filename = ''
     truncate = (-1, -1)
@@ -167,6 +155,11 @@ if __name__ == '__main__':
     if filename == '':
         filename, truncate = random_demo()
 
-    samples_float, fr = get_samples(filename, truncate)
+    outname = '.'.join(filename.split(os.sep)[-1].split('.')[:-1])
+    print(f'Creating spectrogram for {outname}')
+    if truncate != (-1, -1):
+        outname += f'_{truncate[0]}_{truncate[1]}'
+    samples_float, fr = get_samples(filename, truncate, outname)
+
     spg_raw = create_spectrogram_brrr(samples_float, fr)
-    save(spg_raw, filename)
+    save(spg_raw, outname)
