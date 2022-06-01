@@ -60,7 +60,9 @@ def create_spectrogram_brrr(samples, fr):
 
     env['CycAgg'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
 
-    env['Act'] = numpy.zeros((hairs_n, len(samples)), dtype=numpy.float64)
+    time_per_pixel = 1  # in ms
+    act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr)) + 2
+    env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
 
     # Running the BRRR machine
     text, init, get = glsl_gen.generate(imtext, env)
@@ -93,7 +95,7 @@ def get_samples(filename, truncate, outname):
         sound.fade_in(20)
         sound.fade_out(20)
 
-    sound.export(f"out{os.sep}{outname}-fragment.mp3", format="mp3")
+    sound.export(f"out{os.sep}{outname}.mp3", format="mp3")
 
     all_samples = numpy.array(sound.get_array_of_samples())
     samples_float = numpy.array(all_samples).T.astype(numpy.float64)

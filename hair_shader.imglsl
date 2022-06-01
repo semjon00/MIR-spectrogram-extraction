@@ -3,6 +3,15 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 //_GEN_BUFFERS
 
+// Saves sample activation value to Act
+void to_output(int hair_i, float sample_i, float value) {
+    float el_f = (len1(Act) * sample_i) / len(Samples);
+    highp int el_w = int(el_f);
+    float el_d = el_f - float(el_w);
+    Act[hair_i][el_w] += (1 - el_d) * value;
+    Act[hair_i][el_w + 1] += el_d * value;
+}
+
 void main() {
     int hair_i = int(gl_WorkGroupID.x);
 
@@ -25,6 +34,7 @@ void main() {
         act -= (1.0 - _halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w>;
         act -= (_halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w - 1>;
         act /= HairsFreq[hair_i];
-        Act[hair_i][max(0, op_i - _halfsine_span_w / 2)] = act;
+
+        to_output(hair_i, op_i, act);
     }
 }

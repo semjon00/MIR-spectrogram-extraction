@@ -125,6 +125,8 @@ def cook_text(text, v_types):
             break
         substr, digit, name = match.groups()
         digit = int(digit) if digit != '' else 0
+        if name not in v_types:
+            critical_error(f'imGLSL has a {name} array, there is none in the v_types!')
         if len(v_types[name]) == 1:
             critical_error(f'Tried to measure length of {name}, which is not an array')
         if not digit < len(v_types[name]) - 1:
