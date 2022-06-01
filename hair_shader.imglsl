@@ -8,8 +8,10 @@ void to_output(int hair_i, float sample_i, float value) {
     float el_f = (len1(Act) * sample_i) / len(Samples);
     highp int el_w = int(el_f);
     float el_d = el_f - float(el_w);
-    Act[hair_i][el_w] += (1 - el_d) * value;
-    Act[hair_i][el_w + 1] += el_d * value;
+
+    int y_index = len0(Act) - 1 - hair_i;
+    Act[y_index][el_w] += (1 - el_d) * value;
+    Act[y_index][el_w + 1] += el_d * value;
 }
 
 void main() {
