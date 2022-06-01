@@ -1,0 +1,4 @@
+moderngl>=5.6.0
+Pillow>=9.1.0
+numpy>=1.22.0
+pydub>=0.25.0
