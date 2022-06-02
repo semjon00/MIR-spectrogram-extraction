@@ -2,12 +2,14 @@
 Coding GLSL shaders directly is really hard.
 For the ease of prototyping and development, this project uses
 self-developed GLSL-like intermediate representation (imGLSL).
-This file is a imGLSL to actual GLSL compute shader translator.
+This file is a wrapper that allows writing imGLSL instead of actual GLSL compute shaders.
 
-This file abstracts away buffers, providing only functions to interact with them.
+It abstracts away buffers, only providing functions to interact with
+the objects accessible inside the GLSL.
+In the GLSL, simply refer to the objects by the names supplied to set_multiple (or set) function.
 
-Compared to the raw GLSL, imGLSL representation provides this syntax:
-* Indirect access with wrapping: some_arr<-3> = other_arr<10000>
+Compared to the raw GLSL, imGLSL representation also provides some "syntactic sugar":
+* Indirect array access with wrapping: some_arr<-3> = other_arr<10000>
 * Pseudo-multidimensional arrays: arr[1][3]
 * Length pseudo-function: len1(arr), len(arr)
 """
@@ -35,7 +37,7 @@ def cook_imglsl(text, type_clues, v_bindings, match_lines=True, snapshot_name=No
     def exception(text):
         raise Exception(f"Cooking imGLSL: {text}")
 
-    # Cooking accessing arrays
+    # Cooking array accesses
     simple_expr = f"\\[[^\\[\\]]+?\\]"
     wrap_expr = f"\\<[^\\[\\]]+?\\>"
     expr = f'(([A-Za-z\\d_-]+)((({simple_expr})|({wrap_expr}))+))'
@@ -123,6 +125,12 @@ def cook_imglsl(text, type_clues, v_bindings, match_lines=True, snapshot_name=No
 
 
 def objtype(obj, name=None):
+    """
+    Describes a supplied object: measures (if any), type
+    :param obj: Object to describe
+    :param name: Not needed
+    :return: an array, the last element containing type, elements before: measures
+    """
     if isinstance(obj, str):
         # Somebody passed description of an object instead of actually passing the object.
         # Allow this (no validation)
@@ -140,6 +148,7 @@ def objtype(obj, name=None):
 
 
 def assert_type_match(type, obj, name=None):
+    """Compares type of object with a type array (see objtype function)"""
     actual_type = objtype(obj, name)
     if type != actual_type:
         if name is not None:
@@ -172,9 +181,11 @@ class ImglslWrapper:
         self.buffers[name] = _buffer
 
     def cook_imglsl(self, text, match_lines=True, shader_name=None):
+        """Translate imGLSL to GLSL. After translating, you would probably want to actually run the GLSL."""
         return cook_imglsl(text, self.v_types, self.v_bindings, match_lines, snapshot_name=shader_name)
 
     def set(self, name, obj):
+        """Sets value/array that can be used in a shader"""
         if name not in self.v_types:
             self.v_types[name] = objtype(obj, name)
         assert_type_match(self.v_types[name], obj, name)
@@ -184,6 +195,7 @@ class ImglslWrapper:
             self.buffers[name].write(numpy.array(obj))
 
     def set_multiple(self, env):
+        """Sets values/arrays that can be used in a shader"""
         for name in env:
             self.set(name, env[name])
 
