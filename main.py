@@ -74,7 +74,7 @@ def create_spectrogram_brrr(samples, fr,
     # Running the shader
     start_time = time.time()
     pr_start = 0
-    pr_size = 1 << 15
+    pr_size = 1 << 12
     while True:
         tot = 20
         bl = tot * pr_start // len(samples)

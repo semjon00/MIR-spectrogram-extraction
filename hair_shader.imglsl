@@ -39,6 +39,8 @@ void main() {
         act -= (1.0 - _halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w>;
         act -= (_halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w - 1>;
 
+        act *= HairsFreq[hair_i];
+
         to_output(hair_i, op_i, act);
     }
 }
