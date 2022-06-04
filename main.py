@@ -39,12 +39,13 @@ def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> li
     return hairs
 
 
-def create_spectrogram_brrr(samples, fr):
+def create_spectrogram_brrr(samples, fr,
+                            time_per_pixel=10, hpo=48):
     # Preparing the values for the shader run
     env = {}
     env['FrameRate'] = fr
     env['Samples'] = samples
-    env['HairsFreq'] = init_hairs_freq(fr)
+    env['HairsFreq'] = init_hairs_freq(fr, hpo=hpo)
     hairs_n = len(env['HairsFreq'])
 
     _general_friction_coff = 10.07  # The more, the more aggressive is the friction
@@ -57,21 +58,36 @@ def create_spectrogram_brrr(samples, fr):
 
     env['CycAgg'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
 
-    time_per_pixel = 1  # in ms
     act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr)) + 2
     env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
+
+    env['ProcessingStart'] = 0
+    env['ProcessingEnd'] = 0
 
     # Preparing the shader to run
     ctx = moderngl.create_context(standalone=True, require=430)
     w = ImglslWrapper(ctx)
     w.set_multiple(env)
     imtext = open('./hair_shader.imglsl', 'r').read()
-    compute_shader = ctx.compute_shader(w.cook_imglsl(imtext, 'spectrogram'))
+    hairs_shader = ctx.compute_shader(w.cook_imglsl(imtext, 'spectrogram'))
 
+    # Running the shader
     start_time = time.time()
-    compute_shader.run(group_x=((hairs_n + 63) // 64))
-    ctx.finish()
-    print(f"Shader run completed in {(time.time() - start_time):.6f} seconds")
+    pr_start = 0
+    pr_size = 1 << 15
+    while True:
+        tot = 20
+        bl = tot * pr_start // len(samples)
+        print(f"\rRunning the shader... {'#'*bl}{'_'*(tot-bl)}. Elapsed: {(time.time() - start_time):.6f}", end='')
+        pr_end = min(pr_start + pr_size, len(samples))
+        if pr_end == pr_start:
+            break
+        w.set('ProcessingStart', max(1, pr_start))
+        w.set('ProcessingEnd', pr_end)
+        hairs_shader.run(group_x=((hairs_n + 63) // 64))
+        ctx.finish()
+        pr_start = pr_end
+    print(f"\rShader run completed! Elapsed: {(time.time() - start_time):.6f}", end='')
 
     output = w.get('Act')
     return output
@@ -154,8 +170,8 @@ if __name__ == '__main__':
         Path(f).mkdir(exist_ok=True)
     #debug_brrr()
 
-    filename = 'in\\World of Goo - Threadcutter.mp3'
-    truncate = (0, 10)
+    filename = 'in\\Neofeud - The Arcade.mp3'
+    truncate = (-1, -1)
 
     if filename == '':
         filename, truncate = random_demo()

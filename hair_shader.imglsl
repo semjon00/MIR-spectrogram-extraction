@@ -27,7 +27,7 @@ void main() {
 
     float hair_pos = 0.0;
     float hair_speed = 0.0;
-    for (int op_i = 1; op_i < len(Samples); ++op_i) {
+    for (int op_i = ProcessingStart; op_i < ProcessingEnd; ++op_i) {
         hair_speed += - Pull[hair_i] * hair_pos; // Acc pull
         hair_speed += (Samples[op_i] - Samples[op_i - 1]); // Acc response
         hair_speed += - hair_speed * Friction[hair_i]; // Acc friction
