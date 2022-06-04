@@ -7,6 +7,7 @@ import random
 from PIL import Image
 import moderngl
 from ImglslWrapper import ImglslWrapper
+import time
 
 
 def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> list[float]:
@@ -66,7 +67,11 @@ def create_spectrogram_brrr(samples, fr):
     w.set_multiple(env)
     imtext = open('./hair_shader.imglsl', 'r').read()
     compute_shader = ctx.compute_shader(w.cook_imglsl(imtext, 'spectrogram'))
-    compute_shader.run(group_x=hairs_n)
+
+    start_time = time.time()
+    compute_shader.run(group_x=((hairs_n + 63) // 64))
+    ctx.finish()
+    print(f"Shader run completed in {(time.time() - start_time):.6f} seconds")
 
     output = w.get('Act')
     return output
@@ -149,8 +154,8 @@ if __name__ == '__main__':
         Path(f).mkdir(exist_ok=True)
     #debug_brrr()
 
-    filename = ''
-    truncate = (-1, -1)
+    filename = 'in\\World of Goo - Threadcutter.mp3'
+    truncate = (0, 10)
 
     if filename == '':
         filename, truncate = random_demo()
@@ -158,7 +163,7 @@ if __name__ == '__main__':
     outname = '.'.join(filename.split(os.sep)[-1].split('.')[:-1])
     print(f'Creating spectrogram for {outname}')
     if truncate != (-1, -1):
-        outname += f'_{truncate[0]}_{truncate[1]}'
+        outname += f'_{truncate[0]:.3f}_{truncate[1]:.3f}'
     samples_float, fr = get_samples(filename, truncate, outname)
 
     spg_raw = create_spectrogram_brrr(samples_float, fr)

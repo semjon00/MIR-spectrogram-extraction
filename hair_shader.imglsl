@@ -1,5 +1,5 @@
 #version 430
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 //_GEN_BUFFERS
 
@@ -15,7 +15,10 @@ void to_output(int hair_i, float sample_i, float value) {
 }
 
 void main() {
-    int hair_i = int(gl_WorkGroupID.x);
+    int hair_i = int(gl_GlobalInvocationID.x);
+    if (hair_i >= len0(HairsFreq)) {
+        return;
+    }
 
     // Bins that constitute one halfsine
     float _halfsine_span = 0.5 * float(FrameRate) / HairsFreq[hair_i];
