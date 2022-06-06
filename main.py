@@ -39,8 +39,8 @@ def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> li
     return hairs
 
 
-def create_spectrogram_brrr(samples, fr,
-                            time_per_pixel=10, hpo=48):
+def create_spectrogram(samples, fr,
+                       time_per_pixel=10, hpo=48):
     # Preparing the values for the shader run
     env = {}
     env['FrameRate'] = fr
@@ -67,9 +67,9 @@ def create_spectrogram_brrr(samples, fr,
     # Preparing the shader to run
     ctx = moderngl.create_context(standalone=True, require=430)
     w = ImglslWrapper(ctx)
-    w.set_multiple(env)
+    w.define_set(env)
     imtext = open('./hair_shader.imglsl', 'r').read()
-    hairs_shader = ctx.compute_shader(w.cook_imglsl(imtext, 'spectrogram'))
+    hairs_shader = ctx.compute_shader(w.cook_imglsl(imtext, shader_name='spectrogram'))
 
     # Running the shader
     start_time = time.time()
@@ -146,7 +146,7 @@ def save(output, name):
     img.save(f'out/{name}.png')
 
 
-def debug_brrr():
+def debug():
     fr = 44100
     hz = 50
     dur = 0.200
@@ -160,7 +160,7 @@ def debug_brrr():
         sine += [coff * per]
 
     sine += [0.0] * math.floor(fr * 0.200)
-    out = create_spectrogram_brrr(sine, fr)
+    out = create_spectrogram(sine, fr)
     save(out, 'demo')
     exit()
 
@@ -168,9 +168,9 @@ def debug_brrr():
 if __name__ == '__main__':
     for f in ['in', 'out']:
         Path(f).mkdir(exist_ok=True)
-    #debug_brrr()
+    #debug()
 
-    filename = 'in\\Neofeud - The Arcade.mp3'
+    filename = 'in/`'
     truncate = (-1, -1)
 
     if filename == '':
@@ -182,5 +182,5 @@ if __name__ == '__main__':
         outname += f'_{truncate[0]:.3f}_{truncate[1]:.3f}'
     samples_float, fr = get_samples(filename, truncate, outname)
 
-    spg_raw = create_spectrogram_brrr(samples_float, fr)
+    spg_raw = create_spectrogram(samples_float, fr)
     save(spg_raw, outname)

@@ -17,19 +17,19 @@ Compared to the raw GLSL, imGLSL representation also provides some "syntactic su
 import os
 import re
 import numpy
-from moderngl.context import Context as modernglContext
+import moderngl
 
 
 def critical_error(text):
     raise Exception(f"ImglslWrapper.py: {text}")
 
 
-def cook_imglsl(text, type_clues, v_bindings, match_lines=True, snapshot_name=None):
+def cook_imglsl(text, type_clues, buffer_desc, match_lines=True, snapshot_name=None):
     """
     :param text: imGLSL text
     :param type_clues: types of values that are present in the array
-    :param v_bindings: values for array bindings
-    :param match_lines: matching lines or readability of the shader
+    :param buffer_desc: list of lists of variable names, as should be present in the buffers
+    :param match_lines: output matches the lines of the input if True, otherwise produces more readable text
     :param snapshot_name: None for a pure call, string for saving GLSL shader text with this name
     :return: GLSL shader text
     """
@@ -101,15 +101,20 @@ def cook_imglsl(text, type_clues, v_bindings, match_lines=True, snapshot_name=No
     if '//_GEN_BUFFERS' not in text:
         exception('the text must include //_GEN_BUFFERS statement')
     bf_text = '\n/*GLSL-get buffer definitions START*/\n'
-    for value_name in type_clues:
-        deftext = '$_GEN_TYPE$ $_GEN_NAME$$_GEN_IS_ARR$;'\
-            .replace('$_GEN_TYPE$', 'int' if type_clues[value_name][-1] == 'i' else 'double')\
-            .replace('$_GEN_NAME$', value_name)\
-            .replace('$_GEN_IS_ARR$', '' if len(type_clues[value_name]) == 1 else '[]')
-        bf_text += f'layout (std430, binding={v_bindings[value_name]})'\
-                   f' buffer _GEN_BUFFER_{value_name} {"{"}\n'
-        bf_text += deftext
+
+    for buff_i, desc in enumerate(buffer_desc):
+        bf_text += f'layout (std430, binding={buff_i}) buffer _GEN_BUFFER_{buff_i} {"{"}\n'
+        for name in desc:
+            deftext = '    $_GEN_TYPE$ $_GEN_NAME$$_GEN_ARRDATA$;\n' \
+                .replace('$_GEN_TYPE$', 'int' if type_clues[name][-1] == 'i' else 'double') \
+                .replace('$_GEN_NAME$', name)
+            if len(type_clues[name]) > 1:
+                deftext = deftext.replace('$_GEN_ARRDATA$', f"[{str(numpy.prod(type_clues[name][:-1]))}]")
+            else:
+                deftext = deftext.replace('$_GEN_ARRDATA$', '')
+            bf_text += deftext
         bf_text += '\n};\n'
+
     bf_text += '\n/*GLSL-get buffer definitions END*/\n' '//_GEN_BUFFERS'
     if match_lines:
         bf_text = bf_text.replace('\n', ' ')
@@ -124,7 +129,7 @@ def cook_imglsl(text, type_clues, v_bindings, match_lines=True, snapshot_name=No
     return text
 
 
-def objtype(obj, name=None):
+def obj_type(obj, name=None):
     """
     Describes a supplied object: measures (if any), type
     :param obj: Object to describe
@@ -135,87 +140,138 @@ def objtype(obj, name=None):
         # Somebody passed description of an object instead of actually passing the object.
         # Allow this (no validation)
         return obj.split('_')
-    if isinstance(obj, int) or type(obj) == numpy.int32:
-        return ['i']
-    if isinstance(obj, float) or type(obj) == numpy.float64:
-        return ['f']
+    if isinstance(obj, int) or type(obj) in [numpy.int32, numpy.int64]:
+        return ['i']  # Should be 32-bit int
+    if isinstance(obj, float) or type(obj) in [numpy.float32, numpy.float64]:
+        return ['f']  # Should be 64-bit float (double)
     if isinstance(obj, list) or type(obj) == numpy.ndarray:
-        return [len(obj)] + objtype(obj[0], name)
+        return [len(obj)] + obj_type(obj[0], name)
     if name is not None:
         critical_error(f'Can not determine type of value {name}')
     else:
         critical_error(f'Can not determine type of some value object')
 
 
+def type_size(type):
+    size = 1
+    for dimsize in type[:-1]:
+        size *= dimsize
+    if type[-1] == 'i':
+        size *= 4
+    elif type[-1] == 'f':
+        size *= 8
+    else:
+        critical_error(f'Wrong type in objsize')
+    return size
+
+
 def assert_type_match(type, obj, name=None):
     """Compares type of object with a type array (see objtype function)"""
-    actual_type = objtype(obj, name)
+    actual_type = obj_type(obj, name)
     if type != actual_type:
         if name is not None:
             critical_error(f"Type mismatch on {name}."
-                           f"Correct type: {type[name]}, attempted type: {objtype(obj,name)}")
+                           f"Correct type: {type[name]}, attempted type: {obj_type(obj, name)}")
         else:
             critical_error(f"Type mismatch of some object."
-                           f"Correct type: {type[name]}, attempted type: {objtype(obj,name)}")
+                           f"Correct type: {type[name]}, attempted type: {obj_type(obj, name)}")
 
 
 class ImglslWrapper:
     def __init__(self, _ctx):
-        self.v_types = {}
-        self.binding_i = 10
-        self.v_bindings = {}
-        self.buffers = {}
-        if type(_ctx) != modernglContext and _ctx is not None:
+        self.buffers: list[moderngl.Buffer] = []
+        self.types: dict[str, list] = {}
+        self.object_mapping: dict[str, (int, int)] = {}  # value_name->(buf_i, offset)
+        if type(_ctx) != moderngl.context.Context and _ctx is not False:
             critical_error('You are supposed to supply a ModernGL context')
-        self.ctx = _ctx
+        self.ctx: moderngl.context.Context = _ctx
 
-    def _bind_to_buffer(self, name, obj):
-        if name in self.v_bindings:
-            return
-        self.v_bindings[name] = self.binding_i
-        self.binding_i += 1
-        if self.ctx is None:
-            return  # This is a text, no actual buffer needed
-        _buffer = self.ctx.buffer(numpy.array(obj))
-        _buffer.bind_to_storage_buffer(self.v_bindings[name])
-        self.buffers[name] = _buffer
+    def _init_buffer(self, size):
+        if self.ctx is False:
+            self.buffers += [False]
+            return len(self.buffers) - 1  # This is a test, no actual buffer needed
+        _buffer = self.ctx.buffer(reserve=size)
+        self.buffers += [_buffer]
+        buff_i = len(self.buffers) - 1
+        _buffer.bind_to_storage_buffer(buff_i)
+        return buff_i
 
     def cook_imglsl(self, text, match_lines=True, shader_name=None):
         """Translate imGLSL to GLSL. After translating, you would probably want to actually run the GLSL."""
-        return cook_imglsl(text, self.v_types, self.v_bindings, match_lines, snapshot_name=shader_name)
+        buffer_desc = [[] for _ in range(len(self.buffers))]
+        for name in self.object_mapping:
+            buff_i, offset = self.object_mapping[name]
+            buffer_desc[buff_i] += [(offset, name)]
+        buffer_desc = [[v[1] for v in sorted(arr, key=lambda kv: kv[0])] for arr in buffer_desc]
+        return cook_imglsl(text, self.types, buffer_desc, match_lines, snapshot_name=shader_name)
 
     def set(self, name, obj):
-        """Sets value/array that can be used in a shader"""
-        if name not in self.v_types:
-            self.v_types[name] = objtype(obj, name)
-        assert_type_match(self.v_types[name], obj, name)
-        if name not in self.v_bindings:
-            self._bind_to_buffer(name, obj)
-        else:
-            self.buffers[name].write(numpy.array(obj))
+        """Sets a new value for an already defined object."""
+        if name not in self.object_mapping:
+            critical_error(f"Can not set an object ({name}) that was not yet defined. "
+                           f"Use define_set instead.")
+        assert_type_match(self.types[name], obj, name)
+        buf_i, offset = self.object_mapping[name]
+        if len(self.types[name]) == 1:
+            obj = [obj]
+        dt = '<f8' if self.types[name][-1] == 'f' else '<i4'
+        obj = numpy.array(obj, dtype=dt)
+        if self.ctx is False:
+            return  # This is a test, no actual set needed
+        self.buffers[buf_i].write(obj, offset=offset)
 
-    def set_multiple(self, env):
-        """Sets values/arrays that can be used in a shader"""
+    def define_set(self, env):
+        """Defines and sets objects (integers, floats, arrays of integers or floats)
+        that can be used in a shader - creating no more than one buffer."""
+        # Ensuring that object types are stored
+        for name in env:
+            if name not in self.types:
+                self.types[name] = obj_type(env[name], name)
+        # Creating mapped arrays
+        # OpenGL requires the values in the buffer to be aligned
+        # (otherwise head-scratching issues arise)
+        # I managed to get away with not understanding how actually it works
+        # please do not break it
+        offsets = {'i': 0, 'f': 0}
+        for name in env:
+            if name not in self.object_mapping:
+                needed_size = type_size(self.types[name])
+                offsets[self.types[name][-1]] += needed_size
+        for type in offsets:
+            if offsets[type] == 0:
+                continue
+            buffer_i = self._init_buffer(offsets[type])
+            offset = 0
+            for name in env:
+                if self.types[name][-1] != type:
+                    continue
+                needed_size = type_size(self.types[name])
+                self.object_mapping[name] = (buffer_i, offset)
+                offset += needed_size
+        # Assigning values
         for name in env:
             self.set(name, env[name])
 
     def get(self, name):
         """Retrieves a value from the GPU"""
-        if self.ctx is None:
+        if self.ctx is False:
             critical_error(f"This ImglslWrapper is actually a text object: it has no buffers to hold data in."
-                           f"You did not supply moderngl context to in while initializing.")
-        if name not in self.buffers:
+                           f"You did not supply moderngl context to it while initializing.")
+        if name not in self.object_mapping:
             critical_error('No object with this name in the context.')
 
-        dt = '<f8' if self.v_types[name][-1] == 'f' else '<i4'
-        ret = numpy.frombuffer(self.buffers[name].read(), dtype=dt)
+        buf_i, offset = self.object_mapping[name]
+        dt = '<f8' if self.types[name][-1] == 'f' else '<i4'
+        ret = numpy.frombuffer(
+            self.buffers[buf_i].read(type_size(self.types[name]), offset=offset),
+            dtype=dt)
         if len(ret) == 1:
             return ret[0]
-        ret.shape = self.v_types[name][:-1]
+        ret.shape = self.types[name][:-1]
         return ret
 
 
-# Test for cook and
+# For debugging
 if __name__ == '__main__':
     textin = """
 #version 430
@@ -232,13 +288,14 @@ void main() {
     float daaf_simple = daaf[0][1];
     float daaf_wrap = daaf<-1><-1>
     int naaf_mixed = naaf<7>[0];
+}
 """
 
     env = {
         'di': 1,
-        'ni': numpy.int32(1),
+        'ni': numpy.int64(1),
         'df': 1.248,
-        'nf': numpy.float64(1.248),
+        'nf': numpy.float32(1.248),
         'dai': [1, 2],
         'nai': numpy.array([1, 2, 5, 7]),
         'daf': [0.1, 0.3],
@@ -250,9 +307,10 @@ void main() {
         'daaaf': [[[x for x in range(4)]]*3]*2
     }
 
-    test_wrapper = ImglslWrapper(None)
-    test_wrapper.set_multiple(env)
-    textout = test_wrapper.cook_imglsl(textin)
+    test_wrapper = ImglslWrapper(False)
+    test_wrapper.define_set(env)
+    test_wrapper.define_set({'new': 1.23})
+    textout = test_wrapper.cook_imglsl(textin, match_lines=False)
 
     print(f"{'='*15} env\n{env}\n\n"
           f"{'='*15} textin\n{textin}\n"
