@@ -61,6 +61,8 @@ def create_spectrogram(samples, fr,
     act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr)) + 2
     env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
 
+    env['HairsSpeed'] = numpy.zeros(hairs_n, dtype=numpy.float64)
+    env['HairsPos'] = numpy.zeros(hairs_n,dtype=numpy.float64)
     env['ProcessingStart'] = 0
     env['ProcessingEnd'] = 0
 

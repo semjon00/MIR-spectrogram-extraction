@@ -25,8 +25,8 @@ void main() {
     highp int _halfsine_span_w = int(_halfsine_span);
     float _halfsine_span_d = _halfsine_span - float(_halfsine_span_w);
 
-    float hair_pos = 0.0;
-    float hair_speed = 0.0;
+    float hair_pos = HairsPos[hair_i]; // Read from the previous input chunk
+    float hair_speed = HairsSpeed[hair_i];
     for (int op_i = ProcessingStart; op_i < ProcessingEnd; ++op_i) {
         hair_speed += - Pull[hair_i] * hair_pos; // Acc pull
         hair_speed += (Samples[op_i] - Samples[op_i - 1]); // Acc response
@@ -43,4 +43,7 @@ void main() {
 
         to_output(hair_i, op_i, act);
     }
+
+    HairsSpeed[hair_i] = hair_speed; // Pass to the next input chunk
+    HairsPos[hair_i] = hair_pos;
 }

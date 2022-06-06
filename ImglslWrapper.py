@@ -137,9 +137,12 @@ def obj_type(obj, name=None):
     :return: an array, the last element containing type, elements before: measures
     """
     if isinstance(obj, str):
-        # Somebody passed description of an object instead of actually passing the object.
+        # Somebody passed a description of an object instead of actually passing the object.
         # Allow this (no validation)
-        return obj.split('_')
+        t = obj.split('_')
+        for i in range(len(t) - 1):
+            t[i] = int(t[i])
+        return t
     if isinstance(obj, int) or type(obj) in [numpy.int32, numpy.int64]:
         return ['i']  # Should be 32-bit int
     if isinstance(obj, float) or type(obj) in [numpy.float32, numpy.float64]:
