@@ -1,6 +1,7 @@
 import pydub  # https://github.com/jiaaro/pydub
 import numpy
 import os
+import sys
 from pathlib import Path
 import math
 import random
@@ -41,6 +42,18 @@ def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> li
 
 def create_spectrogram(samples, fr,
                        time_per_pixel=10, hpo=48):
+    # Creating an OpenGL context
+    try:
+        ctx = moderngl.create_context(standalone=True, require=430)
+    except:
+        print('ERROR! Could not create context. This probably means that the GPU used does not support OpenGL 4.3.\n'
+              'If you have more than one GPU (both discrete and integrated count),\n'
+              'make sure that you are using the card that supports OpenGL 4.3.\n'
+              'If you do not have a GPU that supports OpenGL 4.3, you may still run the algorithm!\n'
+              'For this, you need to leverage a driver that uses CPU instead of GPU to implement OpenGL;\n'
+              'this driver is called llvmpipe.', file=sys.stderr)
+        exit()
+
     # Preparing the values for the shader run
     env = {}
     env['FrameRate'] = fr
@@ -67,7 +80,6 @@ def create_spectrogram(samples, fr,
     env['ProcessingEnd'] = 0
 
     # Preparing the shader to run
-    ctx = moderngl.create_context(standalone=True, require=430)
     w = ImglslWrapper(ctx)
     w.define_set(env)
     imtext = open('./hair_shader.imglsl', 'r').read()
@@ -172,7 +184,7 @@ if __name__ == '__main__':
         Path(f).mkdir(exist_ok=True)
     #debug()
 
-    filename = 'in/`'
+    filename = 'in\\Neofeud - The Arcade.mp3'
     truncate = (-1, -1)
 
     if filename == '':
