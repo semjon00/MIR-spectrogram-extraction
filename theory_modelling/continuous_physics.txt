@@ -3,29 +3,17 @@ This is not good, especially for higher frequences.
 This file contains an attempt to solve the continuous physic task
 (how to calculate the continuous physics).
 
-Assumptions:
-1.  Friction acceleration can be applied at the end of the continum, to both the speed and the position.
-    We do not need to account for it in the formulas.
-2.  Input acceleration is linear between the start and the end of the continum.
-
-Notes:
-k means some coeficient that can be calculated beforehand. So, k does not necessarily equal k.
-Integrals everywhere are from 0 to x.
+Input acceleration will be counted as constant between the start and the end of the continum.
 
 The equations (hopefully correct):
-A_i(x) = k * x + k          // Input acceleration
-A_p(x) = k * P(x)           // Pull acceleration
-V'(x) = A_i(x) + A_p(x)     // Velocity
-P'(x) = V(x)                // Position
+A_i(x) = с_in_0                     // Input acceleration
+A_p(x) = с_pl_0 * P(x)              // Pull acceleration
+V'(x) = c_nf * (A_i(x) + A_p(x))    // Velocity
+P'(x) = V(x)                        // Position
 
-
-Partial solution (hopefully correct):
-V'(x) = A_i(x) + A_p(x)
-V'(x) = k * x + k + k * P(x)
-V''(x) = (k * x + k + k * P(x))'
-V''(x) = (k * x)' + (k * P(x))'
-V''(x) = k + k * P'(x)
-V''(x) = k + k * V(x)           [Solve V(x) for x = 1]
+Therefore:
+V'(x) = c_nf * (с_in_0 + с_pl_0 * P(x)) = c_in + с_pl * P(x)
+P'(x) = V(x)
 
 
 TODO: continue...
