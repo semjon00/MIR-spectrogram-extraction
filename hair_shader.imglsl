@@ -9,7 +9,7 @@ void to_output(int hair_i, float sample_i, float value) {
     highp int el_w = int(el_f);
     float el_d = el_f - float(el_w);
 
-    int y_index = len0(Act) - 1 - hair_i;
+    int y_index = len0(Act) - 1 - hair_i; // We want lower frequences to be at the bottom of the image
     Act[y_index][el_w] += (1 - el_d) * value;
     Act[y_index][el_w + 1] += el_d * value;
 }
@@ -39,7 +39,8 @@ void main() {
         act -= (1.0 - _halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w>;
         act -= (_halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w - 1>;
 
-        act *= HairsFreq[hair_i];
+        act *= HairsFreq[hair_i]; // Compensate for hair frequency
+        act /= FrameRate * FrameRate; // FrameRate affects (A) _halfsine_span and (B) sum(abs(signal)) in second
 
         to_output(hair_i, op_i, act);
     }

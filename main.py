@@ -46,13 +46,14 @@ def create_spectrogram(samples, fr,
     try:
         ctx = moderngl.create_context(standalone=True, require=430)
     except:
-        print('ERROR! Could not create context. This probably means that the GPU used does not support OpenGL 4.3.\n'
-              'If you have more than one GPU (both discrete and integrated count),\n'
-              'make sure that you are using the card that supports OpenGL 4.3.\n'
-              'If you do not have a GPU that supports OpenGL 4.3, you may still run the algorithm!\n'
-              'For this, you need to leverage a driver that uses CPU instead of GPU to implement OpenGL;\n'
-              'this driver is called llvmpipe.', file=sys.stderr)
-        exit()
+        raise Exception(
+            'ERROR! Could not create context. This probably means that the GPU used does not support OpenGL 4.3.\n'
+            'If you have more than one GPU (both discrete and integrated count),\n'
+            'make sure that you are using the card that supports OpenGL 4.3.\n'
+            'If you do not have a GPU that supports OpenGL 4.3, you may still run the algorithm!\n'
+            'For this, you need to leverage a driver that uses the CPU instead of the GPU to implement OpenGL;\n'
+            'this driver is called llvmpipe.'
+        )
 
     # Preparing the values for the shader run
     env = {}
@@ -101,7 +102,7 @@ def create_spectrogram(samples, fr,
         hairs_shader.run(group_x=((hairs_n + 63) // 64))
         ctx.finish()
         pr_start = pr_end
-    print(f"\rShader run completed! Elapsed: {(time.time() - start_time):.6f}", end='')
+    print(f"\rShader run completed! Elapsed: {(time.time() - start_time):.6f}")
 
     output = w.get('Act')
     return output
@@ -124,6 +125,8 @@ def get_samples(filename, truncate, outname):
     sound = sound.set_channels(1)
 
     if truncate != (-1, -1):
+        if truncate[1] <= 0 or truncate[0] >= sound.duration_seconds:
+            raise Exception('Truncation leaves an empty input')
         sound = sound[truncate[0]*1000:truncate[1]*1000]
         sound.fade_in(20)
         sound.fade_out(20)
@@ -143,15 +146,15 @@ def save(output, name):
         print('ACHTUNG! Output has a nan value!!!')
     output[numpy.isnan(output)] = 0
 
-    output = numpy.clip(output, 1e-20, numpy.inf)
-    output = numpy.log(output)
-    output = numpy.clip(output, -30.0, numpy.inf)
-    output_max = numpy.max(output)
-    output_min = numpy.min(output)
-    output = numpy.clip(output, output_min, numpy.inf)
-    output -= output_min
-    output /= output_max - output_min
-    output **= 2
+    output = numpy.clip(output, 1e-8, 1)
+    output = numpy.log10(output)
+    output += 8.0
+    output /= 8.0
+
+    output **= 2.2
+    output /= 0.9  # Brighten a little, but sacrifice very loud values
+    output = numpy.clip(output, 0.0, 1.0)
+
     output *= 256
     output = numpy.trunc(output)
     output = output.astype(numpy.int8)
@@ -175,7 +178,7 @@ def debug():
 
     sine += [0.0] * math.floor(fr * 0.200)
     out = create_spectrogram(sine, fr)
-    save(out, 'demo')
+    save(out, 'debug')
     exit()
 
 
@@ -185,13 +188,13 @@ if __name__ == '__main__':
     #debug()
 
     filename = 'in\\Neofeud - The Arcade.mp3'
-    truncate = (-1, -1)
+    truncate = (0, 100)
 
     if filename == '':
         filename, truncate = random_demo()
 
     outname = '.'.join(filename.split(os.sep)[-1].split('.')[:-1])
-    print(f'Creating spectrogram for {outname}')
+    print(f'Creating spectrogram for {outname}{"" if truncate == (-1, -1) else f", truncated as {truncate}"}')
     if truncate != (-1, -1):
         outname += f'_{truncate[0]:.3f}_{truncate[1]:.3f}'
     samples_float, fr = get_samples(filename, truncate, outname)
