@@ -57,26 +57,31 @@ def create_spectrogram(samples, fr,
 
     # Preparing the values for the shader run
     env = {}
+    ctds = {}
+
     env['FrameRate'] = fr
     env['Samples'] = samples
     env['HairsFreq'] = init_hairs_freq(fr, hpo=hpo)
     hairs_n = len(env['HairsFreq'])
 
     _general_friction_coff = 10.07  # The more, the more aggressive is the friction
-    friction = [math.pow(x, 0) for x in env['HairsFreq']]
-    friction = [f * _general_friction_coff * math.pi / fr for f in friction]
-    friction = [1.0 - pow(0.1, f) for f in friction]
+    friction = 1.0 - pow(0.1, _general_friction_coff * math.pi / fr)
     env['Friction'] = friction
 
     env['Pull'] = [pow(math.tau * freq / fr, 2) for freq in env['HairsFreq']]
 
     env['CycAgg'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
 
-    act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr)) + 2
-    env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
+    if time_per_pixel <= 0:  # Lossless mode
+        env['Act'] = numpy.zeros((hairs_n, len(samples)), dtype=numpy.float64)
+        ctds['IS_LOSSLESS'] = 'true'
+    else:
+        act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr))
+        env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
+        ctds['IS_LOSSLESS'] = 'false'
 
     env['HairsSpeed'] = numpy.zeros(hairs_n, dtype=numpy.float64)
-    env['HairsPos'] = numpy.zeros(hairs_n,dtype=numpy.float64)
+    env['HairsPos'] = numpy.zeros(hairs_n, dtype=numpy.float64)
     env['ProcessingStart'] = 0
     env['ProcessingEnd'] = 0
 
@@ -84,7 +89,8 @@ def create_spectrogram(samples, fr,
     w = ImglslWrapper(ctx)
     w.define_set(env)
     imtext = open('./hair_shader.imglsl', 'r').read()
-    hairs_shader = ctx.compute_shader(w.cook_imglsl(imtext, shader_name='spectrogram'))
+    glsl_text = w.cook_imglsl(imtext, compile_time_defs=ctds, shader_name='spectrogram')
+    hairs_shader = ctx.compute_shader(glsl_text)
 
     # Running the shader
     start_time = time.time()
@@ -177,7 +183,7 @@ def debug():
         sine += [coff * per]
 
     sine += [0.0] * math.floor(fr * 0.200)
-    out = create_spectrogram(sine, fr)
+    out = create_spectrogram(sine, fr, time_per_pixel=-1)
     save(out, 'debug')
     exit()
 

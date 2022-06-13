@@ -4,14 +4,19 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 //_GEN_BUFFERS
 
 // Saves sample activation value to Act
-void to_output(int hair_i, float sample_i, float value) {
-    float el_f = (len1(Act) * sample_i) / len(Samples);
-    highp int el_w = int(el_f);
-    float el_d = el_f - float(el_w);
-
+void to_output(int hair_i, int sample_i, float value) {
     int y_index = len0(Act) - 1 - hair_i; // We want lower frequences to be at the bottom of the image
-    Act[y_index][el_w] += (1 - el_d) * value;
-    Act[y_index][el_w + 1] += el_d * value;
+
+    if (IS_LOSSLESS) {
+        Act[y_index][sample_i] = value;
+    } else {
+        float sample_i_f = float(sample_i);
+        float el_f = (len1(Act) * sample_i_f) / len(Samples);
+        highp int el_w = int(el_f);
+        float el_d = el_f - float(el_w);
+        Act[y_index][el_w] += (1 - el_d) * value;
+        Act[y_index][el_w + 1] += el_d * value;
+    }
 }
 
 void main() {
@@ -30,7 +35,7 @@ void main() {
     for (int op_i = ProcessingStart; op_i < ProcessingEnd; ++op_i) {
         hair_speed += - Pull[hair_i] * hair_pos; // Acc pull
         hair_speed += (Samples[op_i] - Samples[op_i - 1]); // Acc response
-        hair_speed += - hair_speed * Friction[hair_i]; // Acc friction
+        hair_speed += - hair_speed * Friction; // Acc friction
         hair_pos += hair_speed;
 
         CycAgg[hair_i]<op_i> = CycAgg[hair_i]<op_i-1> + abs(hair_speed);

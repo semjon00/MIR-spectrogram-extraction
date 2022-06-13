@@ -24,11 +24,12 @@ def critical_error(text):
     raise Exception(f"ImglslWrapper.py: {text}")
 
 
-def cook_imglsl(text, type_clues, buffer_desc, match_lines=True, snapshot_name=None):
+def cook_imglsl(text, type_clues, buffer_desc, compile_time_defs=None, match_lines=True, snapshot_name=None):
     """
     :param text: imGLSL text
     :param type_clues: types of values that are present in the array
     :param buffer_desc: list of lists of variable names, as should be present in the buffers
+    :param compile_time_defs: definitions that should be substituted inside the imGLSL text
     :param match_lines: output matches the lines of the input if True, otherwise produces more readable text
     :param snapshot_name: None for a pure call, string for saving GLSL shader text with this name
     :return: GLSL shader text
@@ -120,12 +121,28 @@ def cook_imglsl(text, type_clues, buffer_desc, match_lines=True, snapshot_name=N
         bf_text = bf_text.replace('\n', ' ')
     text = text.replace('//_GEN_BUFFERS', bf_text)
 
+    # Compile time defs
+    if compile_time_defs is not None:
+        for cpd in compile_time_defs:
+            if str.upper(cpd) != cpd or len(cpd) == 0:
+                exception(f'For safety of your feet, all compile-time definitions must be upper case. '
+                          f'{cpd} is not.')
+            # There is a quirk with this regex - does not match at the start or end of file.
+            # Probably not worth the hassle to fix.
+            cexpr = re.compile(f'(([^A-Za-z])({cpd})([^A-Za-z]))')
+            while True:
+                match = cexpr.search(text)
+                if match is None:
+                    break
+                substr, before, var, after = match.groups()
+                text = text.replace(substr, f'{before}({compile_time_defs[cpd]}){after}')
+
     # Final replacements
     for f, t in [('float ', 'double '), ('float(', 'double('), (BL, '['), (BR, ']')]:
         text = text.replace(f, t)
 
     if snapshot_name is not None:
-        open(f'out{os.sep}{snapshot_name}.imglsl', 'w').write(text)
+        open(f'out{os.sep}{snapshot_name}.glsl', 'w').write(text)
     return text
 
 
@@ -199,14 +216,14 @@ class ImglslWrapper:
         _buffer.bind_to_storage_buffer(buff_i)
         return buff_i
 
-    def cook_imglsl(self, text, match_lines=True, shader_name=None):
+    def cook_imglsl(self, text, compile_time_defs=None, match_lines=True, shader_name=None):
         """Translate imGLSL to GLSL. After translating, you would probably want to actually run the GLSL."""
         buffer_desc = [[] for _ in range(len(self.buffers))]
         for name in self.object_mapping:
             buff_i, offset = self.object_mapping[name]
             buffer_desc[buff_i] += [(offset, name)]
         buffer_desc = [[v[1] for v in sorted(arr, key=lambda kv: kv[0])] for arr in buffer_desc]
-        return cook_imglsl(text, self.types, buffer_desc, match_lines, snapshot_name=shader_name)
+        return cook_imglsl(text, self.types, buffer_desc, compile_time_defs, match_lines, snapshot_name=shader_name)
 
     def set(self, name, obj):
         """Sets a new value for an already defined object."""
