@@ -3,6 +3,8 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 //_GEN_BUFFERS
 
+#define M_PI 3.1415926535897932384626433832795
+
 // Saves sample activation value to Act
 void to_output(int hair_i, int sample_i, float value) {
     int y_index = len0(Act) - 1 - hair_i; // We want lower frequences to be at the bottom of the image
@@ -46,6 +48,7 @@ void main() {
 
         act *= HairsFreq[hair_i]; // Compensate for hair frequency
         act /= FrameRate * FrameRate; // FrameRate affects (A) _halfsine_span and (B) sum(abs(signal)) in second
+        act /= TenfoldDecay * M_PI; // Lower friction facilitates higher amplitude
 
         to_output(hair_i, op_i, act);
     }

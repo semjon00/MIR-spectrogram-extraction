@@ -64,8 +64,8 @@ def create_spectrogram(samples, fr,
     env['HairsFreq'] = init_hairs_freq(fr, hpo=hpo)
     hairs_n = len(env['HairsFreq'])
 
-    _general_friction_coff = 10.07  # The more, the more aggressive is the friction
-    friction = 1.0 - pow(0.1, _general_friction_coff * math.pi / fr)
+    env['TenfoldDecay'] = 0.100  # in ms
+    friction = 1 - pow(0.1, 2 / (fr * env['TenfoldDecay']))
     env['Friction'] = friction
 
     env['Pull'] = [pow(math.tau * freq / fr, 2) for freq in env['HairsFreq']]
@@ -179,6 +179,7 @@ def debug():
         coff = i / math.floor(fr * dur)
         coff = math.sin(math.tau * coff - 1/4 * math.tau) + 1
         coff /= 2
+        # coff = 1
         per = math.sin(math.tau * hz * i/fr)
         sine += [coff * per]
 
