@@ -4,8 +4,8 @@ other pallets
 display scales for the result (as an option)
 
 --- Algorithm improvements ---
+improve faster loudness diminishing
 faster sound loudness ramp-up
-faster loudness diminishing
 retrospective adjacent noise correction
 
 --- Other possible algorithms ---

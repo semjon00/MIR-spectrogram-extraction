@@ -7,17 +7,17 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 // Saves sample activation value to Act
 void to_output(int hair_i, int sample_i, float value) {
-    int y_index = len0(Act) - 1 - hair_i; // We want lower frequences to be at the bottom of the image
+    int y_index = len0(Ans) - 1 - hair_i; // We want lower frequences to be at the bottom of the image
 
     if (IS_LOSSLESS) {
-        Act[y_index][sample_i] = value;
+        Ans[y_index][sample_i] = value;
     } else {
         float sample_i_f = float(sample_i);
-        float el_f = (len1(Act) * sample_i_f) / len(Samples);
+        float el_f = (len1(Ans) * sample_i_f) / len(Samples);
         highp int el_w = int(el_f);
         float el_d = el_f - float(el_w);
-        Act[y_index][el_w] += (1 - el_d) * value;
-        Act[y_index][el_w + 1] += el_d * value;
+        Ans[y_index][el_w] += (1 - el_d) * value;
+        Ans[y_index][el_w + 1] += el_d * value;
     }
 }
 
@@ -28,9 +28,9 @@ void main() {
     }
 
     // Bins that constitute one halfsine
-    float _halfsine_span = 0.5 * float(FrameRate) / HairsFreq[hair_i];
-    highp int _halfsine_span_w = int(_halfsine_span);
-    float _halfsine_span_d = _halfsine_span - float(_halfsine_span_w);
+    float _sine_span = float(FrameRate) / HairsFreq[hair_i];
+    highp int _sine_span_w = int(_sine_span);
+    float _sine_span_d = _sine_span - float(_sine_span_w);
 
     float hair_pos = HairsPos[hair_i]; // Read from the previous input chunk
     float hair_speed = HairsSpeed[hair_i];
@@ -43,15 +43,21 @@ void main() {
         CycAgg[hair_i]<op_i> = CycAgg[hair_i]<op_i-1> + abs(hair_speed);
 
         float act = CycAgg[hair_i]<op_i>;
-        act -= (1.0 - _halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w>;
-        act -= (_halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w - 1>;
+        act -= (1.0 - _sine_span_d) * CycAgg[hair_i]<op_i - _sine_span_w>;
+        act -= (_sine_span_d) * CycAgg[hair_i]<op_i - _sine_span_w - 1>;
 
         // TODO: optimize
         act *= HairsFreq[hair_i]; // Compensate for hair frequency
-        act /= FrameRate * FrameRate; // FrameRate affects (A) _halfsine_span and (B) sum(abs(signal)) in second
+        act /= FrameRate * FrameRate; // FrameRate affects (A) _sine_span and (B) sum(abs(signal)) in second
         act /= TenfoldDecay * M_PI; // Lower friction facilitates higher amplitude
 
-        to_output(hair_i, op_i, act);
+        CycAcc[hair_i]<op_i> = act;
+        float new = CycAcc[hair_i]<op_i>;
+        float old = _sine_span_d * CycAcc[hair_i]<op_i - _sine_span_w>;
+        old += (1.0 - _sine_span_d) * CycAcc[hair_i]<op_i - _sine_span_w - 1>;
+        float additional = max(0.0, new - old * SineNondecay[hair_i]);
+
+        to_output(hair_i, op_i, additional);
     }
 
     HairsSpeed[hair_i] = hair_speed; // Pass to the next input chunk
