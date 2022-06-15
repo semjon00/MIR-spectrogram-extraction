@@ -278,7 +278,7 @@ class ImglslWrapper:
             critical_error(f"This ImglslWrapper is actually a text object: it has no buffers to hold data in."
                            f"You did not supply moderngl context to it while initializing.")
         if name not in self.object_mapping:
-            critical_error('No object with this name in the context.')
+            critical_error(f'No object with name {name} in the context.')
 
         buf_i, offset = self.object_mapping[name]
         dt = '<f8' if self.types[name][-1] == 'f' else '<i4'

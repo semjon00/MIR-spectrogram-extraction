@@ -1,14 +1,13 @@
 import pydub  # https://github.com/jiaaro/pydub
-import numpy
+import moderngl  # https://github.com/moderngl/moderngl
+import numpy  # https://github.com/numpy/numpy
+from PIL import Image  # https://github.com/python-pillow/Pillow
 import os
-import sys
 from pathlib import Path
 import math
 import random
-from PIL import Image
-import moderngl
-from ImglslWrapper import ImglslWrapper
 import time
+from ImglslWrapper import ImglslWrapper
 
 
 def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> list[float]:

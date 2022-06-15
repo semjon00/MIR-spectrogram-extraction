@@ -1,5 +1,12 @@
-BUG: sudden -inf in the shader
-instantaneous sound off Friction
-fair sound volume
-compressed output
+--- Code and usability ---
+refactor!
+other pallets
+display scales for the result (as an option)
+
+--- Algorithm improvements ---
+faster sound loudness ramp-up
+faster loudness diminishing
 retrospective adjacent noise correction
+
+--- Other possible algorithms ---
+cyclic sine matcher

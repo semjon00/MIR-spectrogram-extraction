@@ -46,6 +46,7 @@ void main() {
         act -= (1.0 - _halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w>;
         act -= (_halfsine_span_d) * CycAgg[hair_i]<op_i - _halfsine_span_w - 1>;
 
+        // TODO: optimize
         act *= HairsFreq[hair_i]; // Compensate for hair frequency
         act /= FrameRate * FrameRate; // FrameRate affects (A) _halfsine_span and (B) sum(abs(signal)) in second
         act /= TenfoldDecay * M_PI; // Lower friction facilitates higher amplitude
