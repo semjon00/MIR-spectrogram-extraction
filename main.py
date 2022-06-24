@@ -65,18 +65,17 @@ def create_spectrogram(samples, fr,
 
     # Duplicates info in the shader
     # TODO: refactor?
-    sine_span = [fr / hf for hf in env['HairsFreq']]
+    halfsine_span = [0.5 * (fr / hf) for hf in env['HairsFreq']]
 
     env['TenfoldDecay'] = 0.300  # in ms
     friction = 1 - pow(0.1, 2 / (fr * env['TenfoldDecay']))
     env['Friction'] = friction
-    env['SineNondecay'] = [pow(0.1, sine_span[x]/(env['TenfoldDecay'] * fr)) for x in range(hairs_n)]
+    env['HalfsineNondecay'] = [pow(0.1, halfsine_span[x]/(env['TenfoldDecay'] * fr)) for x in range(hairs_n)]
 
     env['Pull'] = [pow(math.tau * freq / fr, 2) for freq in env['HairsFreq']]
 
-    env['CycAgg'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
-
-    env['CycAcc'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
+    env['CycRawAcc'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
+    env['CycAggPacc'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
 
     if time_per_pixel <= 0:  # Lossless mode
         env['Ans'] = numpy.zeros((hairs_n, len(samples)), dtype=numpy.float64)
@@ -198,7 +197,7 @@ def debug():
 if __name__ == '__main__':
     for f in ['in', 'out']:
         Path(f).mkdir(exist_ok=True)
-    #debug()
+    debug()
 
     filename = 'in\\Neofeud - The Arcade.mp3'
     truncate = (97, 100)

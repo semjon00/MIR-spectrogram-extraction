@@ -32,34 +32,36 @@ void main() {
     highp int _sine_span_w = int(_sine_span);
     float _sine_span_d = _sine_span - float(_sine_span_w);
 
-    float hair_pos = HairsPos[hair_i]; // Read from the previous input chunk
+    // Read from the previous input chunk
+    float hair_pos = HairsPos[hair_i];
     float hair_speed = HairsSpeed[hair_i];
+
     for (int op_i = ProcessingStart; op_i < ProcessingEnd; ++op_i) {
+        // General pendulum physics (discrete, that is, imprecise)
         hair_speed += - Pull[hair_i] * hair_pos; // Acc pull
         hair_speed += (Samples[op_i] - Samples[op_i - 1]); // Acc response
         hair_speed += - hair_speed * Friction; // Acc friction
         hair_pos += hair_speed;
 
-        CycAgg[hair_i]<op_i> = CycAgg[hair_i]<op_i-1> + abs(hair_speed);
+        // Perceived activation
+        CycRawAcc[hair_i]<op_i> = abs(hair_speed);
+        float old = _sine_span_d * CycRawAcc[hair_i]<op_i - _sine_span_w>;
+        old += (1.0 - _sine_span_d) * CycRawAcc[hair_i]<op_i - _sine_span_w - 1>;
+        float pacc = max(0.0, abs(hair_speed) - old * HalfsineNondecay[hair_i]);
+        pacc *= HairsFreq[hair_i]; // Compensate for hair frequency
+        pacc /= FrameRate; // FrameRate affects (A) _sine_span and (B) sum(abs(signal)) in second
+        pacc /= TenfoldDecay; // Lower friction facilitates higher amplitude
+        //CycAggPacc[hair_i]<op_i> = pacc;
 
-        float act = CycAgg[hair_i]<op_i>;
-        act -= (1.0 - _sine_span_d) * CycAgg[hair_i]<op_i - _sine_span_w>;
-        act -= (_sine_span_d) * CycAgg[hair_i]<op_i - _sine_span_w - 1>;
+        //float new = CycAcc [hair_i]<op_i>;
+        //float old = _sine_span_d * CycAcc [hair_i]<op_i - _sine_span_w>;
+        //old += (1.0 - _sine_span_d) * CycAcc [hair_i]<op_i - _sine_span_w - 1>;
+        //float additional = max(0.0, new - old * SineNondecay [hair_i]);
 
-        // TODO: optimize
-        act *= HairsFreq[hair_i]; // Compensate for hair frequency
-        act /= FrameRate * FrameRate; // FrameRate affects (A) _sine_span and (B) sum(abs(signal)) in second
-        act /= TenfoldDecay * M_PI; // Lower friction facilitates higher amplitude
-
-        CycAcc[hair_i]<op_i> = act;
-        float new = CycAcc[hair_i]<op_i>;
-        float old = _sine_span_d * CycAcc[hair_i]<op_i - _sine_span_w>;
-        old += (1.0 - _sine_span_d) * CycAcc[hair_i]<op_i - _sine_span_w - 1>;
-        float additional = max(0.0, new - old * SineNondecay[hair_i]);
-
-        to_output(hair_i, op_i, additional);
+        to_output(hair_i, op_i, pacc);
     }
 
-    HairsSpeed[hair_i] = hair_speed; // Pass to the next input chunk
+    // Pass to the next input chunk
+    HairsSpeed[hair_i] = hair_speed;
     HairsPos[hair_i] = hair_pos;
 }
