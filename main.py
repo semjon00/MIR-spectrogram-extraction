@@ -10,12 +10,7 @@ import time
 from ImglslWrapper import ImglslWrapper
 
 
-def init_hairs_freq(fr=44100, cf=440, hpo=48, low_cut=20, high_cut=20_000) -> list[float]:
-    # Due to the limitation of the shader implementation
-    # (somebody's not as good at math), we do not allow high frequencies,
-    # as they will make pendulums accelerate to infinity
-    high_cut = min(high_cut, int(0.9 * fr / math.tau))
-
+def gen_freq(cf=440, hpo=48, low_cut=20, high_cut=1_000) -> list[float]:
     l_cf = math.log(cf)
     l_hpo = math.log(2) / hpo
     l_low = math.log(low_cut)
@@ -60,34 +55,36 @@ def create_spectrogram(samples, fr,
 
     env['FrameRate'] = fr
     env['Samples'] = samples
-    env['HairsFreq'] = init_hairs_freq(fr, hpo=hpo)
-    hairs_n = len(env['HairsFreq'])
+    env['MtcFreq'] = gen_freq(hpo=hpo)
+    mtc_n = len(env['MtcFreq'])
 
-    env['TenfoldDecay'] = 0.100  # in ms
-    friction = 1 - pow(0.1, 2 / (fr * env['TenfoldDecay']))
-    env['Friction'] = friction
+    # How many half-sines to capture in a matcher's buffer
+    env['MtcHsSpan'] = [2 for _ in range(mtc_n)]
+    # Length of a buffer
+    env['MtcLength'] = [env['MtcHsSpan'][x] * min(20, math.floor(fr / env['MtcFreq'][x])) for x in range(mtc_n)]
+    # Buffer width in samples
+    env['MtcSampleSpan'] = [(fr / env['MtcFreq'][x]) * (0.5 * env['MtcHsSpan'][x]) for x in range(mtc_n)]
+    mtc_max_length = max(env['MtcLength'])
 
-    env['Pull'] = [pow(math.tau * freq / fr, 2) for freq in env['HairsFreq']]
-
-    env['CycAgg'] = numpy.zeros((hairs_n, 5 + math.ceil(fr / env['HairsFreq'][0])), dtype=numpy.float64)
+    env['MtcBuf'] = [[0.0 for _ in range(mtc_max_length)] for _ in range(mtc_n)]
+    env['MtcSincor'] = [0.0 for _ in range(mtc_n)]
+    env['MtcCoscor'] = [0.0 for _ in range(mtc_n)]
 
     if time_per_pixel <= 0:  # Lossless mode
-        env['Act'] = numpy.zeros((hairs_n, len(samples)), dtype=numpy.float64)
+        env['Act'] = numpy.zeros((mtc_n, len(samples)), dtype=numpy.float64)
         ctds['IS_LOSSLESS'] = 'true'
     else:
         act_len = int((1 / (time_per_pixel / 1000)) * (len(samples) / fr))
-        env['Act'] = numpy.zeros((hairs_n, act_len), dtype=numpy.float64)
+        env['Act'] = numpy.zeros((mtc_n, act_len), dtype=numpy.float64)
         ctds['IS_LOSSLESS'] = 'false'
 
-    env['HairsSpeed'] = numpy.zeros(hairs_n, dtype=numpy.float64)
-    env['HairsPos'] = numpy.zeros(hairs_n, dtype=numpy.float64)
     env['ProcessingStart'] = 0
     env['ProcessingEnd'] = 0
 
     # Preparing the shader to run
     w = ImglslWrapper(ctx)
     w.define_set(env)
-    imtext = open('./hair_shader.imglsl', 'r').read()
+    imtext = open('cyc_matcher_shader.imglsl', 'r').read()
     glsl_text = w.cook_imglsl(imtext, compile_time_defs=ctds, shader_name='spectrogram')
     hairs_shader = ctx.compute_shader(glsl_text)
 
@@ -104,7 +101,7 @@ def create_spectrogram(samples, fr,
             break
         w.set('ProcessingStart', max(1, pr_start))
         w.set('ProcessingEnd', pr_end)
-        hairs_shader.run(group_x=((hairs_n + 63) // 64))
+        hairs_shader.run(group_x=((mtc_n + 63) // 64))
         ctx.finish()
         pr_start = pr_end
     print(f"\rShader run completed! Elapsed: {(time.time() - start_time):.6f}")
@@ -157,8 +154,8 @@ def save(output, name):
     output /= 8.0
 
     output **= 2.2
-    output /= 0.9  # Brighten a little, but sacrifice very loud values
-    output = numpy.clip(output, 0.0, 1.0)
+    #output /= 0.9  # Brighten a little, but sacrifice very loud values
+    #output = numpy.clip(output, 0.0, 1.0)
 
     output *= 256
     output = numpy.trunc(output)
@@ -191,7 +188,7 @@ def debug():
 if __name__ == '__main__':
     for f in ['in', 'out']:
         Path(f).mkdir(exist_ok=True)
-    #debug()
+    debug()
 
     filename = 'in\\Neofeud - The Arcade.mp3'
     truncate = (0, 100)
@@ -205,5 +202,5 @@ if __name__ == '__main__':
         outname += f'_{truncate[0]:.3f}_{truncate[1]:.3f}'
     samples_float, fr = get_samples(filename, truncate, outname)
 
-    spg_raw = create_spectrogram(samples_float, fr)
+    spg_raw = create_spectrogram(samples_float, fr, time_per_pixel=-1)
     save(spg_raw, outname)

@@ -138,7 +138,9 @@ def cook_imglsl(text, type_clues, buffer_desc, compile_time_defs=None, match_lin
                 text = text.replace(substr, f'{before}({compile_time_defs[cpd]}){after}')
 
     # Final replacements
-    for f, t in [('float ', 'double '), ('float(', 'double('), (BL, '['), (BR, ']')]:
+    for f, t in [('float ', 'double '), ('float(', 'double('),
+                 ('float32 ', 'float '), ('float32(', 'float('),
+                 (BL, '['), (BR, ']')]:
         text = text.replace(f, t)
 
     if snapshot_name is not None:
