@@ -63,8 +63,9 @@ def create_spectrogram(samples, fr,
     env['HairsFreq'] = init_hairs_freq(fr, hpo=hpo)
     hairs_n = len(env['HairsFreq'])
 
-    env['TenfoldDecay'] = 0.100  # in ms
-    friction = 1 - pow(0.1, 2 / (fr * env['TenfoldDecay']))
+    tfd_l = lambda f: 2/math.sqrt(f)
+    env['TenfoldDecay'] = [tfd_l(f) for f in env['HairsFreq']]  # in seconds
+    friction = [1 - pow(0.1, 2 / (fr * td)) for td in env['TenfoldDecay']]
     env['Friction'] = friction
 
     env['Pull'] = [pow(math.tau * freq / fr, 2) for freq in env['HairsFreq']]
@@ -193,8 +194,8 @@ if __name__ == '__main__':
         Path(f).mkdir(exist_ok=True)
     #debug()
 
-    filename = 'in\\Neofeud - The Arcade.mp3'
-    truncate = (0, 100)
+    filename = 'in/Nakanojojo - Bittersweet (feat. Kuishinboakachan) (Nakarin Remix).mp3'
+    truncate = (187, 195)
 
     if filename == '':
         filename, truncate = random_demo()
@@ -205,5 +206,5 @@ if __name__ == '__main__':
         outname += f'_{truncate[0]:.3f}_{truncate[1]:.3f}'
     samples_float, fr = get_samples(filename, truncate, outname)
 
-    spg_raw = create_spectrogram(samples_float, fr)
+    spg_raw = create_spectrogram(samples_float, fr, time_per_pixel=1, hpo=16*12)
     save(spg_raw, outname)

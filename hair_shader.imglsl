@@ -37,7 +37,7 @@ void main() {
     for (int op_i = ProcessingStart; op_i < ProcessingEnd; ++op_i) {
         hair_speed += - Pull[hair_i] * hair_pos; // Acc pull
         hair_speed += (Samples[op_i] - Samples[op_i - 1]); // Acc response
-        hair_speed += - hair_speed * Friction; // Acc friction
+        hair_speed += - hair_speed * Friction[hair_i]; // Acc friction
         hair_pos += hair_speed;
 
         CycAgg[hair_i]<op_i> = CycAgg[hair_i]<op_i-1> + abs(hair_speed);
@@ -49,7 +49,7 @@ void main() {
         // TODO: optimize
         act *= HairsFreq[hair_i]; // Compensate for hair frequency
         act /= FrameRate * FrameRate; // FrameRate affects (A) _halfsine_span and (B) sum(abs(signal)) in second
-        act /= TenfoldDecay * M_PI; // Lower friction facilitates higher amplitude
+        act /= TenfoldDecay[hair_i] * M_PI; // Lower friction facilitates higher amplitude
 
         to_output(hair_i, op_i, act);
     }
